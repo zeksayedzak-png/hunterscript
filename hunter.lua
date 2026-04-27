@@ -7,15 +7,15 @@ local settings = {
     hitboxSize = 50,
 }
 
--- ==================== HITBOX ====================
+-- HITBOX
 local function createHitbox(targetPlayer)
     if not targetPlayer.Character then return end
     local head = targetPlayer.Character:FindFirstChild("Head")
     if not head then return end
-    
-    local old = targetPlayer.Character:FindFirstChild("HitboxHead")
-    if old then old:Destroy() end
-    
+    pcall(function()
+        local old = targetPlayer.Character:FindFirstChild("HitboxHead")
+        if old then old:Destroy() end
+    end)
     local hitbox = Instance.new("Part")
     hitbox.Name = "HitboxHead"
     hitbox.Shape = Enum.PartType.Ball
@@ -29,19 +29,19 @@ local function createHitbox(targetPlayer)
     hitbox.Massless = true
     hitbox.Size = Vector3.new(5, 5, 5)
     hitbox.Parent = targetPlayer.Character
-    
     runService.Heartbeat:Connect(function()
-        if hitbox and hitbox.Parent and head and head.Parent then
-            if settings.enabled then
-                local size = settings.hitboxSize / 10
-                hitbox.Size = Vector3.new(size, size, size)
-                hitbox.Position = head.Position
-                hitbox.Transparency = 0.5
-            else
-                hitbox.Transparency = 1
-                hitbox.Size = Vector3.new(0.1, 0.1, 0.1)
+        pcall(function()
+            if hitbox and hitbox.Parent and head and head.Parent then
+                if settings.enabled then
+                    local size = settings.hitboxSize / 10
+                    hitbox.Size = Vector3.new(size, size, size)
+                    hitbox.Position = head.Position
+                    hitbox.Transparency = 0.5
+                else
+                    hitbox.Transparency = 1
+                end
             end
-        end
+        end)
     end)
 end
 
@@ -57,40 +57,34 @@ refreshAll()
 
 game.Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function()
-        wait(1)
+        task.wait(1)
         createHitbox(plr)
     end)
 end)
 
 player.CharacterAdded:Connect(function()
-    wait(1)
+    task.wait(1)
     refreshAll()
 end)
 
--- ==================== GUI للهاتف ====================
+-- GUI
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RivalsAimbot"
 screenGui.Parent = player:PlayerGui
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- الإطار الرئيسي - صغير وفي نص الشاشة
 local mainFrame = Instance.new("Frame")
 mainFrame.Size = UDim2.new(0, 170, 0, 75)
 mainFrame.Position = UDim2.new(0.5, -85, 0.5, -37)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 mainFrame.BackgroundTransparency = 0.25
 mainFrame.BorderSizePixel = 0
-mainFrame.ClipsDescendants = false
 mainFrame.Parent = screenGui
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 8)
 
-local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 8)
-corner.Parent = mainFrame
-
--- ==================== السحب بالإصبع ====================
+-- سحب
 local dragActive = false
-local dragStart = nil
 local frameStart = nil
 
 local dragDetector = Instance.new("TextButton")
@@ -100,10 +94,6 @@ dragDetector.Text = ""
 dragDetector.AutoButtonColor = false
 dragDetector.ZIndex = 10
 dragDetector.Parent = mainFrame
-
-dragDetector.TouchSwipe:Connect(function(swipeDirection, numberOfTouches, onObject)
-    -- منع السحب يحرك الشاشة حق اللعبة
-end)
 
 dragDetector.TouchPan:Connect(function(touchPositions, totalTranslation, velocity, state)
     if state == Enum.UserInputState.Begin then
@@ -121,7 +111,7 @@ dragDetector.TouchPan:Connect(function(touchPositions, totalTranslation, velocit
     end
 end)
 
--- ==================== SWITCH ====================
+-- SWITCH
 local switchButton = Instance.new("TextButton")
 switchButton.Size = UDim2.new(0, 40, 0, 22)
 switchButton.Position = UDim2.new(0, 8, 0, 8)
@@ -153,12 +143,12 @@ switchButton.Tap:Connect(function()
     end
 end)
 
--- ==================== SLIDER ====================
+-- SLIDER
 local sliderLabel = Instance.new("TextLabel")
 sliderLabel.Size = UDim2.new(0, 150, 0, 12)
 sliderLabel.Position = UDim2.new(0, 10, 0, 35)
 sliderLabel.BackgroundTransparency = 1
-sliderLabel.Text = "حجم Hitbox: 50"
+sliderLabel.Text = "Hitbox: 50"
 sliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 sliderLabel.TextSize = 11
 sliderLabel.Font = Enum.Font.SourceSansBold
@@ -194,7 +184,6 @@ sliderKnob.ZIndex = 7
 sliderKnob.Parent = sliderTrack
 Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
 
--- منطق السلايدر للتاتش
 local function updateSlider(touchPos)
     local absPos = sliderTrack.AbsolutePosition
     local absSize = sliderTrack.AbsoluteSize
@@ -204,7 +193,7 @@ local function updateSlider(touchPos)
     settings.hitboxSize = val
     sliderFill.Size = UDim2.new(pct, 0, 1, 0)
     sliderKnob.Position = UDim2.new(pct, -8, 0, -5)
-    sliderLabel.Text = "حجم Hitbox: " .. val
+    sliderLabel.Text = "Hitbox: " .. val
 end
 
 sliderTrack.Tap:Connect(function(input)
@@ -221,7 +210,5 @@ sliderKnob.TouchPan:Connect(function(touchPositions, totalTranslation, velocity,
     settings.hitboxSize = val
     sliderFill.Size = UDim2.new(pct, 0, 1, 0)
     sliderKnob.Position = UDim2.new(pct, -8, 0, -5)
-    sliderLabel.Text = "حجم Hitbox: " .. val
+    sliderLabel.Text = "Hitbox: " .. val
 end)
-
-print("✅ RIVALS Aimbot v3 - يعمل على الهاتف - جاهز")
