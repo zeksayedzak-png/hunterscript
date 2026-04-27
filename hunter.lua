@@ -1,369 +1,299 @@
--- ================================================
--- 🎯 SMART MOBILE GAMEPASS BYPASS
--- ⚡ يعمل 100% على الهاتف: loadstring(game:HttpGet(""))()
--- 💰 يحاول جميع طرق الحصول على Gamepass
--- ================================================
+--[[
+    RIVALS - Smart Head Hitbox Aimbot
+    لماب RIVALS - منفذ Delta
+    الميزات: Hitbox متغير + Switch + Slider + واجهة متحركة
+]]
 
-wait(2)
-print("🎮 جاري التحميل...")
+local player = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local uis = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
 
--- خدمات أساسية
-local Players = game:GetService("Players")
-local Marketplace = game:GetService("MarketplaceService")
-local Http = game:GetService("HttpService")
-local Replicated = game:GetService("ReplicatedStorage")
+-- ==================== الإعدادات ====================
+local settings = {
+    enabled = false,
+    hitboxSize = 50, -- الحجم الافتراضي (0-100)
+}
 
-local player = Players.LocalPlayer
-if not player then return end
-
-print("✅ الخدمات جاهزة")
-
--- إعدادات
-local attacking = false
-local results = {}
-
--- 🔍 دالة ذكية للبحث عن Gamepass
-local function FindGamepassInfo(gamepassId)
-    local info = {}
+-- ==================== إنشاء Hitboxes ====================
+local function createHitbox(targetPlayer)
+    if not targetPlayer.Character then return end
+    local head = targetPlayer.Character:FindFirstChild("Head")
+    if not head then return end
     
-    -- المحاولة 1: من MarketplaceService
-    pcall(function()
-        local product = Marketplace:GetProductInfo(gamepassId)
-        info.name = product.Name
-        info.price = product.PriceInRobux or 0
-        info.type = product.AssetTypeId == 34 and "Gamepass" or "Other"
-        info.success = true
-    end)
+    -- إزالة القديم
+    local old = targetPlayer.Character:FindFirstChild("HitboxHead")
+    if old then old:Destroy() end
     
-    -- المحاولة 2: البحث في الكود
-    if not info.success then
-        pcall(function()
-            -- البحث في كل Scripts
-            for _, script in pairs(game:GetDescendants()) do
-                if script:IsA("Script") then
-                    local source = script.Source
-                    if source:find(tostring(gamepassId)) then
-                        -- استخراج الاسم
-                        local nameMatch = source:match('Name%s-[:=]%s-["\']([^"\']+)["\']')
-                        info.name = nameMatch or "Gamepass_" .. gamepassId
-                        info.location = script:GetFullName()
-                        break
-                    end
-                end
-            end
-        end)
+    -- صنع كرة شفافة حول الرأس
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "HitboxHead"
+    hitbox.Shape = Enum.PartType.Ball
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.Color = Color3.fromRGB(255, 0, 0)
+    hitbox.Transparency = 0.6
+    hitbox.Anchored = true
+    hitbox.CanCollide = false
+    hitbox.CanTouch = false
+    hitbox.CanQuery = false
+    hitbox.Massless = true
+    hitbox.Parent = targetPlayer.Character
+    
+    -- تحديث الحجم والمكان
+    local function updateHitbox()
+        if not hitbox or not hitbox.Parent or not head or not head.Parent then
+            if hitbox then hitbox:Destroy() end
+            return
+        end
+        local size = settings.hitboxSize / 10 -- تحويل 0-100 إلى حجم
+        hitbox.Size = Vector3.new(size, size, size)
+        hitbox.Position = head.Position
     end
     
-    return info
+    -- ربط التحديث
+    runService.Heartbeat:Connect(function()
+        if settings.enabled and hitbox and hitbox.Parent then
+            updateHitbox()
+        end
+    end)
+    
+    return hitbox
 end
 
--- ⚔️ طرق هجوم متعددة
-local function AttackGamepass(gamepassId)
-    if attacking then return {"جاري الهجوم بالفعل"} end
-    
-    attacking = true
-    results = {}
-    
-    print("🎯 بدأ الهجوم على: " .. gamepassId)
-    
-    -- معلومات Gamepass
-    local gamepassInfo = FindGamepassInfo(gamepassId)
-    print("📝 الاسم: " .. (gamepassInfo.name or "غير معروف"))
-    
-    -- طريقة 1: Marketplace مباشر
-    pcall(function()
-        Marketplace:PromptProductPurchase(player, gamepassId)
-        table.insert(results, "✅ أرسل طلب شراء مباشر")
-    end)
-    
-    wait(1)
-    
-    -- طريقة 2: RemoteEvents
-    local remoteCount = 0
-    pcall(function()
-        for _, obj in pairs(Replicated:GetDescendants()) do
-            if obj:IsA("RemoteEvent") then
-                remoteCount = remoteCount + 1
-                
-                -- محاولات مختلفة
-                pcall(function() obj:FireServer(gamepassId) end)
-                pcall(function() obj:FireServer({id = gamepassId}) end)
-                pcall(function() obj:FireServer({gamepassId = gamepassId, player = player}) end)
-                pcall(function() obj:FireServer({productId = gamepassId, bought = true}) end)
-                
-                if remoteCount % 10 == 0 then
-                    wait(0.5) -- تأخير للهاتف
-                end
-            end
+-- تحديث كل الهيتبوكسات
+local function refreshAllHitboxes()
+    for _, plr in ipairs(game.Players:GetPlayers()) do
+        if plr ~= player then
+            createHitbox(plr)
         end
-        table.insert(results, "✅ أرسل لـ " .. remoteCount .. " RemoteEvents")
-    end)
-    
-    -- طريقة 3: RemoteFunctions
-    pcall(function()
-        for _, obj in pairs(Replicated:GetDescendants()) do
-            if obj:IsA("RemoteFunction") then
-                pcall(function() obj:InvokeServer(gamepassId) end)
-                pcall(function() obj:InvokeServer({id = gamepassId}) end)
-            end
-        end
-        table.insert(results, "✅ حاول RemoteFunctions")
-    end)
-    
-    -- طريقة 4: BindableEvents (للـ LocalScripts)
-    pcall(function()
-        if player:FindFirstChild("PlayerScripts") then
-            for _, obj in pairs(player.PlayerScripts:GetDescendants()) do
-                if obj:IsA("BindableEvent") then
-                    pcall(function() obj:Fire(gamepassId) end)
-                end
-            end
-            table.insert(results, "✅ حاول BindableEvents")
-        end
-    end)
-    
-    wait(2)
-    
-    -- طريقة 5: إشعار وهمي
-    pcall(function()
-        local gui = Instance.new("ScreenGui")
-        gui.Name = "FakePurchaseNotify"
-        
-        local frame = Instance.new("Frame")
-        frame.Size = UDim2.new(0.4, 0, 0.1, 0)
-        frame.Position = UDim2.new(0.3, 0, 0.1, 0)
-        frame.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-        
-        local text = Instance.new("TextLabel")
-        text.Text = "✅ تم شراء Gamepass: " .. (gamepassInfo.name or gamepassId)
-        text.Size = UDim2.new(1, 0, 1, 0)
-        text.BackgroundTransparency = 1
-        text.TextColor3 = Color3.new(1, 1, 1)
-        text.Font = Enum.Font.GothamBold
-        text.TextSize = 14
-        
-        text.Parent = frame
-        frame.Parent = gui
-        gui.Parent = player:WaitForChild("PlayerGui")
-        
-        table.insert(results, "🎨 عرض إشعار وهمي")
-        
-        wait(3)
-        gui:Destroy()
-    end)
-    
-    attacking = false
-    return results
+    end
 end
 
--- 🎨 واجهة ذكية للهاتف
-local function CreateSmartUI()
-    -- تنظيف القديم
-    pcall(function()
-        for _, gui in pairs(player.PlayerGui:GetChildren()) do
-            if gui.Name == "GamepassHunterUI" then
-                gui:Destroy()
-            end
+-- عند دخول لاعب جديد
+game.Players.PlayerAdded:Connect(function(plr)
+    plr.CharacterAdded:Connect(function()
+        wait(1)
+        if settings.enabled then
+            createHitbox(plr)
         end
     end)
-    
-    wait(1)
-    
-    local screen = Instance.new("ScreenGui")
-    screen.Name = "GamepassHunterUI"
-    screen.ResetOnSpawn = false
-    
-    -- الإطار الرئيسي
-    local main = Instance.new("Frame")
-    main.Size = UDim2.new(0.9, 0, 0.4, 0)
-    main.Position = UDim2.new(0.05, 0, 0.3, 0)
-    main.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    main.BorderSizePixel = 2
-    main.BorderColor3 = Color3.fromRGB(0, 150, 255)
-    main.Active = true
-    main.Draggable = true
-    
-    -- العنوان
-    local title = Instance.new("TextLabel")
-    title.Text = "🎮 Gamepass Hunter"
-    title.Size = UDim2.new(1, 0, 0.15, 0)
-    title.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 16
-    
-    -- حقل الإدخال
-    local input = Instance.new("TextBox")
-    input.PlaceholderText = "أدخل Gamepass ID هنا..."
-    input.Text = ""
-    input.Size = UDim2.new(0.8, 0, 0.15, 0)
-    input.Position = UDim2.new(0.1, 0, 0.2, 0)
-    input.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
-    input.TextColor3 = Color3.new(1, 1, 1)
-    input.Font = Enum.Font.Gotham
-    input.TextSize = 14
-    
-    -- زر الهجوم
-    local attackBtn = Instance.new("TextButton")
-    attackBtn.Text = "⚔️ بدء الهجوم"
-    attackBtn.Size = UDim2.new(0.8, 0, 0.2, 0)
-    attackBtn.Position = UDim2.new(0.1, 0, 0.4, 0)
-    attackBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
-    attackBtn.TextColor3 = Color3.new(1, 1, 1)
-    attackBtn.Font = Enum.Font.GothamBold
-    attackBtn.TextSize = 14
-    
-    -- شريط التقدم
-    local progress = Instance.new("Frame")
-    progress.Size = UDim2.new(0, 0, 0.05, 0)
-    progress.Position = UDim2.new(0.1, 0, 0.65, 0)
-    progress.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
-    progress.BorderSizePixel = 0
-    progress.Visible = false
-    
-    -- حالة
-    local status = Instance.new("TextLabel")
-    status.Text = "جاهز - أدخل Gamepass ID"
-    status.Size = UDim2.new(0.8, 0, 0.15, 0)
-    status.Position = UDim2.new(0.1, 0, 0.75, 0)
-    status.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    status.TextColor3 = Color3.new(1, 1, 1)
-    status.Font = Enum.Font.Gotham
-    status.TextSize = 11
-    status.TextWrapped = true
-    
-    -- زر الإغلاق
-    local closeBtn = Instance.new("TextButton")
-    closeBtn.Text = "✕"
-    closeBtn.Size = UDim2.new(0.1, 0, 0.12, 0)
-    closeBtn.Position = UDim2.new(0.85, 0, 0.02, 0)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-    closeBtn.TextColor3 = Color3.new(1, 1, 1)
-    closeBtn.Font = Enum.Font.GothamBold
-    
-    -- التجميع
-    title.Parent = main
-    input.Parent = main
-    attackBtn.Parent = main
-    progress.Parent = main
-    status.Parent = main
-    closeBtn.Parent = main
-    main.Parent = screen
-    screen.Parent = player.PlayerGui
-    
-    -- زر الهجوم
-    attackBtn.MouseButton1Click:Connect(function()
-        if attacking then
-            status.Text = "⏳ جاري الهجوم... انتظر"
-            return
-        end
-        
-        local idText = input.Text:gsub("%D", "") -- إزالة غير الأرقام
-        local gamepassId = tonumber(idText)
-        
-        if not gamepassId or gamepassId < 100000 then
-            status.Text = "❌ أدخل ID صحيح (6+ أرقام)"
-            status.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-            
-            wait(1.5)
-            status.Text = "جاهز - أدخل Gamepass ID"
-            status.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-            return
-        end
-        
-        -- تحديث الواجهة
-        attackBtn.Text = "⚡ جاري..."
-        attackBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
-        status.Text = "🔍 يبحث عن Gamepass " .. gamepassId
-        progress.Visible = true
-        progress.Size = UDim2.new(0, 0, 0.05, 0)
-        
-        -- تشغيل الهجوم
-        spawn(function()
-            local startTime = tick()
-            
-            -- تحريك شريط التقدم
-            local progressAnim = spawn(function()
-                while attacking do
-                    wait(0.1)
-                    local elapsed = tick() - startTime
-                    local percent = math.min(elapsed / 30, 1) -- 30 ثانية كحد أقصى
-                    progress.Size = UDim2.new(0.8 * percent, 0, 0.05, 0)
-                end
-            end)
-            
-            -- تنفيذ الهجوم
-            local attackResults = AttackGamepass(gamepassId)
-            
-            -- عرض النتائج
-            if #attackResults > 0 then
-                status.Text = "✅ اكتمل! " .. #attackResults .. " طريقة نجحت"
-                status.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-                
-                -- طباعة النتائج
-                print("\n🎯 نتائج الهجوم على " .. gamepassId .. ":")
-                for i, result in ipairs(attackResults) do
-                    print(i .. ". " .. result)
-                end
-            else
-                status.Text = "❌ لم ينجح - جرب ID آخر"
-                status.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-            end
-            
-            -- إعادة تعيين الواجهة
-            attackBtn.Text = "⚔️ بدء الهجوم"
-            attackBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
-            progress.Visible = false
-            
-            wait(2)
-            if not attacking then
-                status.Text = "جاهز - أدخل Gamepass ID"
-                status.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-            end
-        end)
-    end)
-    
-    -- زر الإغلاق
-    closeBtn.MouseButton1Click:Connect(function()
-        screen:Destroy()
-    end)
-    
-    print("✅ الواجهة جاهزة")
-    return screen
-end
-
--- 🚀 التشغيل
-print("\n" .. string.rep("🎮", 35))
-print("🎯 GAMEPASS HUNTER - MOBILE EDITION")
-print("⚡ 5 طرق هجوم مختلفة")
-print("📱 يعمل على: loadstring(game:HttpGet())()")
-print(string.rep("🎮", 35))
-
-wait(3)
-
--- إنشاء الواجهة
-pcall(CreateSmartUI)
-
--- إشعار تحميل
-spawn(function()
-    local notice = Instance.new("TextLabel")
-    notice.Text = "🎮 Gamepass Hunter جاهز!"
-    notice.Size = UDim2.new(0.6, 0, 0.05, 0)
-    notice.Position = UDim2.new(0.2, 0, 0.1, 0)
-    notice.BackgroundColor3 = Color3.fromRGB(0, 150, 200)
-    notice.TextColor3 = Color3.new(1, 1, 1)
-    notice.Font = Enum.Font.GothamBold
-    notice.Parent = player.PlayerGui
-    
-    wait(3)
-    pcall(function() notice:Destroy() end)
 end)
 
--- تصدير الدوال
-_G.HuntGamepass = AttackGamepass
-_G.GetResults = function() return results end
+-- ==================== الواجهة (GUI) ====================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RivalsAimbot"
+screenGui.Parent = player:PlayerGui
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
-print("\n✅ استخدم الواجهة أو اكتب:")
-print("_G.HuntGamepass(123456)")
+-- الحاوية الرئيسية (قابلة للسحب)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 180, 0, 80)
+mainFrame.Position = UDim2.new(0.5, -90, 0.5, -40)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+mainFrame.BackgroundTransparency = 0.3
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
 
-return "🎮 Gamepass Hunter v2.0 - WORKING"
+-- زوايا دائرية
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, 10)
+corner.Parent = mainFrame
+
+-- ==================== نظام السحب ====================
+local dragging = false
+local dragStart = nil
+local startPos = nil
+
+mainFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = input.Position
+        startPos = mainFrame.Position
+    end
+end)
+
+uis.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+uis.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = false
+    end
+end)
+
+-- ==================== الـ SWITCH ====================
+local switchButton = Instance.new("TextButton")
+switchButton.Name = "Switch"
+switchButton.Size = UDim2.new(0, 44, 0, 24)
+switchButton.Position = UDim2.new(0, 10, 0, 10)
+switchButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50) -- أحمر = متوقف
+switchButton.Text = ""
+switchButton.BorderSizePixel = 0
+switchButton.AutoButtonColor = false
+switchButton.Parent = mainFrame
+
+local switchCorner = Instance.new("UICorner")
+switchCorner.CornerRadius = UDim.new(1, 0)
+switchCorner.Parent = switchButton
+
+-- الدائرة اللي بتتحرك داخل السويتش
+local switchKnob = Instance.new("Frame")
+switchKnob.Name = "Knob"
+switchKnob.Size = UDim2.new(0, 20, 0, 20)
+switchKnob.Position = UDim2.new(0, 2, 0, 2) -- يبدأ يسار
+switchKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+switchKnob.BorderSizePixel = 0
+switchKnob.Parent = switchButton
+
+local knobCorner = Instance.new("UICorner")
+knobCorner.CornerRadius = UDim.new(1, 0)
+knobCorner.Parent = switchKnob
+
+-- وظيفة السويتش
+local function toggleAimbot()
+    settings.enabled = not settings.enabled
+    
+    if settings.enabled then
+        -- أخضر = شغال، الدائرة تروح يمين
+        switchButton.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+        switchKnob:TweenPosition(
+            UDim2.new(0, 22, 0, 2),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.2,
+            true
+        )
+        refreshAllHitboxes()
+    else
+        -- أحمر = متوقف، الدائرة ترجع يسار
+        switchButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+        switchKnob:TweenPosition(
+            UDim2.new(0, 2, 0, 2),
+            Enum.EasingDirection.Out,
+            Enum.EasingStyle.Quad,
+            0.2,
+            true
+        )
+        -- تدمير كل الهيتبوكسات
+        for _, plr in ipairs(game.Players:GetPlayers()) do
+            if plr ~= player and plr.Character then
+                local hb = plr.Character:FindFirstChild("HitboxHead")
+                if hb then hb:Destroy() end
+            end
+        end
+    end
+end
+
+switchButton.MouseButton1Click:Connect(toggleAimbot)
+
+-- ==================== الـ SLIDER ====================
+local sliderLabel = Instance.new("TextLabel")
+sliderLabel.Size = UDim2.new(0, 160, 0, 14)
+sliderLabel.Position = UDim2.new(0, 10, 0, 40)
+sliderLabel.BackgroundTransparency = 1
+sliderLabel.Text = "Hitbox: 50"
+sliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+sliderLabel.TextSize = 12
+sliderLabel.Font = Enum.Font.SourceSansBold
+sliderLabel.TextXAlignment = Enum.TextXAlignment.Center
+sliderLabel.Parent = mainFrame
+
+-- خط السلايدر
+local sliderTrack = Instance.new("Frame")
+sliderTrack.Name = "Track"
+sliderTrack.Size = UDim2.new(0, 160, 0, 6)
+sliderTrack.Position = UDim2.new(0, 10, 0, 56)
+sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+sliderTrack.BorderSizePixel = 0
+sliderTrack.Parent = mainFrame
+
+local trackCorner = Instance.new("UICorner")
+trackCorner.CornerRadius = UDim.new(1, 0)
+trackCorner.Parent = sliderTrack
+
+-- دائرة السلايدر
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Name = "SliderKnob"
+sliderKnob.Size = UDim2.new(0, 18, 0, 18)
+sliderKnob.Position = UDim2.new(0.5, -9, 0, -6)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderKnob.BorderSizePixel = 0
+sliderKnob.Parent = sliderTrack
+
+local sliderKnobCorner = Instance.new("UICorner")
+sliderKnobCorner.CornerRadius = UDim.new(1, 0)
+sliderKnobCorner.Parent = sliderKnob
+
+-- ملء السلايدر (الجزء الأخضر)
+local sliderFill = Instance.new("Frame")
+sliderFill.Name = "Fill"
+sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
+sliderFill.Position = UDim2.new(0, 0, 0, 0)
+sliderFill.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
+sliderFill.BorderSizePixel = 0
+sliderFill.Parent = sliderTrack
+
+local fillCorner = Instance.new("UICorner")
+fillCorner.CornerRadius = UDim.new(1, 0)
+fillCorner.Parent = sliderFill
+
+-- منطق السلايدر
+local function updateSlider(input)
+    local trackAbsPos = sliderTrack.AbsolutePosition
+    local trackWidth = sliderTrack.AbsoluteSize.X
+    local relativeX = math.clamp(input.Position.X - trackAbsPos.X, 0, trackWidth)
+    local percent = relativeX / trackWidth
+    local value = math.floor(percent * 100)
+    
+    settings.hitboxSize = value
+    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+    sliderKnob.Position = UDim2.new(percent, -9, 0, -6)
+    sliderLabel.Text = "Hitbox: " .. value
+end
+
+local sliderDragging = false
+
+sliderTrack.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = true
+        updateSlider(input)
+    end
+end)
+
+sliderKnob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        sliderDragging = true
+    end
+end)
+
+uis.InputChanged:Connect(function(input)
+    if sliderDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        updateSlider(input)
+    end
+end)
+
+uis.InputEnded:Connect(function(input)
+    sliderDragging = false
+end)
+
+-- ==================== إعادة تهيئة عند الموت ====================
+player.CharacterAdded:Connect(function()
+    wait(1)
+    if settings.enabled then
+        refreshAllHitboxes()
+    end
+end)
+
+-- ==================== رسالة جاهزية ====================
+print("✅ RIVALS Aimbot جاهز | Switch + Slider + Hitbox متصل بالرأس")
