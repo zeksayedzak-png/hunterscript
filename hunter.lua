@@ -1,67 +1,51 @@
---[[
-    RIVALS - Smart Head Hitbox Aimbot
-    لماب RIVALS - منفذ Delta
-    الميزات: Hitbox متغير + Switch + Slider + واجهة متحركة
-]]
-
 local player = game.Players.LocalPlayer
-local camera = workspace.CurrentCamera
 local uis = game:GetService("UserInputService")
 local runService = game:GetService("RunService")
 
--- ==================== الإعدادات ====================
 local settings = {
     enabled = false,
-    hitboxSize = 50, -- الحجم الافتراضي (0-100)
+    hitboxSize = 50,
 }
 
--- ==================== إنشاء Hitboxes ====================
+-- ==================== HITBOX ====================
 local function createHitbox(targetPlayer)
     if not targetPlayer.Character then return end
     local head = targetPlayer.Character:FindFirstChild("Head")
     if not head then return end
     
-    -- إزالة القديم
     local old = targetPlayer.Character:FindFirstChild("HitboxHead")
     if old then old:Destroy() end
     
-    -- صنع كرة شفافة حول الرأس
     local hitbox = Instance.new("Part")
     hitbox.Name = "HitboxHead"
     hitbox.Shape = Enum.PartType.Ball
     hitbox.Material = Enum.Material.ForceField
     hitbox.Color = Color3.fromRGB(255, 0, 0)
-    hitbox.Transparency = 0.6
+    hitbox.Transparency = 0.5
     hitbox.Anchored = true
     hitbox.CanCollide = false
     hitbox.CanTouch = false
     hitbox.CanQuery = false
     hitbox.Massless = true
+    hitbox.Size = Vector3.new(5, 5, 5)
     hitbox.Parent = targetPlayer.Character
     
-    -- تحديث الحجم والمكان
-    local function updateHitbox()
-        if not hitbox or not hitbox.Parent or not head or not head.Parent then
-            if hitbox then hitbox:Destroy() end
-            return
-        end
-        local size = settings.hitboxSize / 10 -- تحويل 0-100 إلى حجم
-        hitbox.Size = Vector3.new(size, size, size)
-        hitbox.Position = head.Position
-    end
-    
-    -- ربط التحديث
     runService.Heartbeat:Connect(function()
-        if settings.enabled and hitbox and hitbox.Parent then
-            updateHitbox()
+        if hitbox and hitbox.Parent and head and head.Parent then
+            if settings.enabled then
+                local size = settings.hitboxSize / 10
+                hitbox.Size = Vector3.new(size, size, size)
+                hitbox.Position = head.Position
+                hitbox.Transparency = 0.5
+            else
+                hitbox.Transparency = 1
+                hitbox.Size = Vector3.new(0.1, 0.1, 0.1)
+            end
         end
     end)
-    
-    return hitbox
 end
 
--- تحديث كل الهيتبوكسات
-local function refreshAllHitboxes()
+local function refreshAll()
     for _, plr in ipairs(game.Players:GetPlayers()) do
         if plr ~= player then
             createHitbox(plr)
@@ -69,231 +53,175 @@ local function refreshAllHitboxes()
     end
 end
 
--- عند دخول لاعب جديد
+refreshAll()
+
 game.Players.PlayerAdded:Connect(function(plr)
     plr.CharacterAdded:Connect(function()
         wait(1)
-        if settings.enabled then
-            createHitbox(plr)
-        end
+        createHitbox(plr)
     end)
 end)
 
--- ==================== الواجهة (GUI) ====================
+player.CharacterAdded:Connect(function()
+    wait(1)
+    refreshAll()
+end)
+
+-- ==================== GUI للهاتف ====================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "RivalsAimbot"
 screenGui.Parent = player:PlayerGui
 screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
--- الحاوية الرئيسية (قابلة للسحب)
+-- الإطار الرئيسي - صغير وفي نص الشاشة
 local mainFrame = Instance.new("Frame")
-mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 180, 0, 80)
-mainFrame.Position = UDim2.new(0.5, -90, 0.5, -40)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-mainFrame.BackgroundTransparency = 0.3
+mainFrame.Size = UDim2.new(0, 170, 0, 75)
+mainFrame.Position = UDim2.new(0.5, -85, 0.5, -37)
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+mainFrame.BackgroundTransparency = 0.25
 mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = false
 mainFrame.Parent = screenGui
 
--- زوايا دائرية
 local corner = Instance.new("UICorner")
-corner.CornerRadius = UDim.new(0, 10)
+corner.CornerRadius = UDim.new(0, 8)
 corner.Parent = mainFrame
 
--- ==================== نظام السحب ====================
-local dragging = false
+-- ==================== السحب بالإصبع ====================
+local dragActive = false
 local dragStart = nil
-local startPos = nil
+local frameStart = nil
 
-mainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = true
-        dragStart = input.Position
-        startPos = mainFrame.Position
-    end
+local dragDetector = Instance.new("TextButton")
+dragDetector.Size = UDim2.new(1, 0, 1, 0)
+dragDetector.BackgroundTransparency = 1
+dragDetector.Text = ""
+dragDetector.AutoButtonColor = false
+dragDetector.ZIndex = 10
+dragDetector.Parent = mainFrame
+
+dragDetector.TouchSwipe:Connect(function(swipeDirection, numberOfTouches, onObject)
+    -- منع السحب يحرك الشاشة حق اللعبة
 end)
 
-uis.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        local delta = input.Position - dragStart
+dragDetector.TouchPan:Connect(function(touchPositions, totalTranslation, velocity, state)
+    if state == Enum.UserInputState.Begin then
+        dragActive = true
+        frameStart = mainFrame.Position
+    elseif state == Enum.UserInputState.Change and dragActive then
         mainFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            frameStart.X.Scale,
+            frameStart.X.Offset + totalTranslation.X,
+            frameStart.Y.Scale,
+            frameStart.Y.Offset + totalTranslation.Y
         )
+    elseif state == Enum.UserInputState.End then
+        dragActive = false
     end
 end)
 
-uis.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
-end)
-
--- ==================== الـ SWITCH ====================
+-- ==================== SWITCH ====================
 local switchButton = Instance.new("TextButton")
-switchButton.Name = "Switch"
-switchButton.Size = UDim2.new(0, 44, 0, 24)
-switchButton.Position = UDim2.new(0, 10, 0, 10)
-switchButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50) -- أحمر = متوقف
+switchButton.Size = UDim2.new(0, 40, 0, 22)
+switchButton.Position = UDim2.new(0, 8, 0, 8)
+switchButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
 switchButton.Text = ""
 switchButton.BorderSizePixel = 0
 switchButton.AutoButtonColor = false
+switchButton.ZIndex = 5
 switchButton.Parent = mainFrame
+Instance.new("UICorner", switchButton).CornerRadius = UDim.new(1, 0)
 
-local switchCorner = Instance.new("UICorner")
-switchCorner.CornerRadius = UDim.new(1, 0)
-switchCorner.Parent = switchButton
-
--- الدائرة اللي بتتحرك داخل السويتش
 local switchKnob = Instance.new("Frame")
-switchKnob.Name = "Knob"
-switchKnob.Size = UDim2.new(0, 20, 0, 20)
-switchKnob.Position = UDim2.new(0, 2, 0, 2) -- يبدأ يسار
+switchKnob.Size = UDim2.new(0, 18, 0, 18)
+switchKnob.Position = UDim2.new(0, 2, 0, 2)
 switchKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 switchKnob.BorderSizePixel = 0
+switchKnob.ZIndex = 6
 switchKnob.Parent = switchButton
+Instance.new("UICorner", switchKnob).CornerRadius = UDim.new(1, 0)
 
-local knobCorner = Instance.new("UICorner")
-knobCorner.CornerRadius = UDim.new(1, 0)
-knobCorner.Parent = switchKnob
-
--- وظيفة السويتش
-local function toggleAimbot()
+switchButton.Tap:Connect(function()
     settings.enabled = not settings.enabled
-    
     if settings.enabled then
-        -- أخضر = شغال، الدائرة تروح يمين
         switchButton.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
-        switchKnob:TweenPosition(
-            UDim2.new(0, 22, 0, 2),
-            Enum.EasingDirection.Out,
-            Enum.EasingStyle.Quad,
-            0.2,
-            true
-        )
-        refreshAllHitboxes()
+        switchKnob:TweenPosition(UDim2.new(0, 20, 0, 2), "Out", "Quad", 0.15, true)
     else
-        -- أحمر = متوقف، الدائرة ترجع يسار
         switchButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
-        switchKnob:TweenPosition(
-            UDim2.new(0, 2, 0, 2),
-            Enum.EasingDirection.Out,
-            Enum.EasingStyle.Quad,
-            0.2,
-            true
-        )
-        -- تدمير كل الهيتبوكسات
-        for _, plr in ipairs(game.Players:GetPlayers()) do
-            if plr ~= player and plr.Character then
-                local hb = plr.Character:FindFirstChild("HitboxHead")
-                if hb then hb:Destroy() end
-            end
-        end
+        switchKnob:TweenPosition(UDim2.new(0, 2, 0, 2), "Out", "Quad", 0.15, true)
     end
-end
+end)
 
-switchButton.MouseButton1Click:Connect(toggleAimbot)
-
--- ==================== الـ SLIDER ====================
+-- ==================== SLIDER ====================
 local sliderLabel = Instance.new("TextLabel")
-sliderLabel.Size = UDim2.new(0, 160, 0, 14)
-sliderLabel.Position = UDim2.new(0, 10, 0, 40)
+sliderLabel.Size = UDim2.new(0, 150, 0, 12)
+sliderLabel.Position = UDim2.new(0, 10, 0, 35)
 sliderLabel.BackgroundTransparency = 1
-sliderLabel.Text = "Hitbox: 50"
+sliderLabel.Text = "حجم Hitbox: 50"
 sliderLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-sliderLabel.TextSize = 12
+sliderLabel.TextSize = 11
 sliderLabel.Font = Enum.Font.SourceSansBold
 sliderLabel.TextXAlignment = Enum.TextXAlignment.Center
+sliderLabel.ZIndex = 5
 sliderLabel.Parent = mainFrame
 
--- خط السلايدر
-local sliderTrack = Instance.new("Frame")
-sliderTrack.Name = "Track"
-sliderTrack.Size = UDim2.new(0, 160, 0, 6)
-sliderTrack.Position = UDim2.new(0, 10, 0, 56)
-sliderTrack.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+local sliderTrack = Instance.new("TextButton")
+sliderTrack.Size = UDim2.new(0, 150, 0, 5)
+sliderTrack.Position = UDim2.new(0, 10, 0, 50)
+sliderTrack.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 sliderTrack.BorderSizePixel = 0
+sliderTrack.Text = ""
+sliderTrack.AutoButtonColor = false
+sliderTrack.ZIndex = 5
 sliderTrack.Parent = mainFrame
+Instance.new("UICorner", sliderTrack).CornerRadius = UDim.new(1, 0)
 
-local trackCorner = Instance.new("UICorner")
-trackCorner.CornerRadius = UDim.new(1, 0)
-trackCorner.Parent = sliderTrack
-
--- دائرة السلايدر
-local sliderKnob = Instance.new("Frame")
-sliderKnob.Name = "SliderKnob"
-sliderKnob.Size = UDim2.new(0, 18, 0, 18)
-sliderKnob.Position = UDim2.new(0.5, -9, 0, -6)
-sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-sliderKnob.BorderSizePixel = 0
-sliderKnob.Parent = sliderTrack
-
-local sliderKnobCorner = Instance.new("UICorner")
-sliderKnobCorner.CornerRadius = UDim.new(1, 0)
-sliderKnobCorner.Parent = sliderKnob
-
--- ملء السلايدر (الجزء الأخضر)
 local sliderFill = Instance.new("Frame")
-sliderFill.Name = "Fill"
 sliderFill.Size = UDim2.new(0.5, 0, 1, 0)
-sliderFill.Position = UDim2.new(0, 0, 0, 0)
 sliderFill.BackgroundColor3 = Color3.fromRGB(50, 255, 50)
 sliderFill.BorderSizePixel = 0
+sliderFill.ZIndex = 6
 sliderFill.Parent = sliderTrack
+Instance.new("UICorner", sliderFill).CornerRadius = UDim.new(1, 0)
 
-local fillCorner = Instance.new("UICorner")
-fillCorner.CornerRadius = UDim.new(1, 0)
-fillCorner.Parent = sliderFill
+local sliderKnob = Instance.new("Frame")
+sliderKnob.Size = UDim2.new(0, 16, 0, 16)
+sliderKnob.Position = UDim2.new(0.5, -8, 0, -5)
+sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sliderKnob.BorderSizePixel = 0
+sliderKnob.ZIndex = 7
+sliderKnob.Parent = sliderTrack
+Instance.new("UICorner", sliderKnob).CornerRadius = UDim.new(1, 0)
 
--- منطق السلايدر
-local function updateSlider(input)
-    local trackAbsPos = sliderTrack.AbsolutePosition
-    local trackWidth = sliderTrack.AbsoluteSize.X
-    local relativeX = math.clamp(input.Position.X - trackAbsPos.X, 0, trackWidth)
-    local percent = relativeX / trackWidth
-    local value = math.floor(percent * 100)
-    
-    settings.hitboxSize = value
-    sliderFill.Size = UDim2.new(percent, 0, 1, 0)
-    sliderKnob.Position = UDim2.new(percent, -9, 0, -6)
-    sliderLabel.Text = "Hitbox: " .. value
+-- منطق السلايدر للتاتش
+local function updateSlider(touchPos)
+    local absPos = sliderTrack.AbsolutePosition
+    local absSize = sliderTrack.AbsoluteSize
+    local relX = math.clamp(touchPos.X - absPos.X, 0, absSize.X)
+    local pct = relX / absSize.X
+    local val = math.floor(pct * 100)
+    settings.hitboxSize = val
+    sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+    sliderKnob.Position = UDim2.new(pct, -8, 0, -5)
+    sliderLabel.Text = "حجم Hitbox: " .. val
 end
 
-local sliderDragging = false
-
-sliderTrack.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        sliderDragging = true
-        updateSlider(input)
-    end
+sliderTrack.Tap:Connect(function(input)
+    updateSlider(input.Position)
 end)
 
-sliderKnob.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-        sliderDragging = true
-    end
+sliderKnob.TouchPan:Connect(function(touchPositions, totalTranslation, velocity, state)
+    local absPos = sliderTrack.AbsolutePosition
+    local absSize = sliderTrack.AbsoluteSize
+    local touchX = touchPositions[1].Position.X
+    local relX = math.clamp(touchX - absPos.X, 0, absSize.X)
+    local pct = relX / absSize.X
+    local val = math.floor(pct * 100)
+    settings.hitboxSize = val
+    sliderFill.Size = UDim2.new(pct, 0, 1, 0)
+    sliderKnob.Position = UDim2.new(pct, -8, 0, -5)
+    sliderLabel.Text = "حجم Hitbox: " .. val
 end)
 
-uis.InputChanged:Connect(function(input)
-    if sliderDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-        updateSlider(input)
-    end
-end)
-
-uis.InputEnded:Connect(function(input)
-    sliderDragging = false
-end)
-
--- ==================== إعادة تهيئة عند الموت ====================
-player.CharacterAdded:Connect(function()
-    wait(1)
-    if settings.enabled then
-        refreshAllHitboxes()
-    end
-end)
-
--- ==================== رسالة جاهزية ====================
-print("✅ RIVALS Aimbot جاهز | Switch + Slider + Hitbox متصل بالرأس")
+print("✅ RIVALS Aimbot v3 - يعمل على الهاتف - جاهز")
