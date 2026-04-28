@@ -1,14 +1,14 @@
--- Rivals Head Hitbox Expander for Delta Executor
--- Mobile Optimized GUI with Full Controls
+-- Rivals Head Hitbox Expander V2.0 for Delta Executor
+-- With Real-time Update (0.2s Loop) & Proper Head Attachment
 
 --[[
-المميزات:
-✅ Hitbox دائري شفاف متصل برأس كل لاعب
-✅ زر Switch للتشغيل/الإيقاف (أخضر = شغال / أحمر = مقفول)
-✅ سلايدر من 0 لـ 100 للتحكم بحجم الـ Hitbox
-✅ زر Toggle للشفافية الكاملة أو الشبه شفافة
-✅ واجهة قابلة للسحب بالإصبع
-✅ مخصص للعبة Rivals
+✅ Hitbox كروي متصل مباشرة برأس كل عدو
+✅ تحديث كل 0.2 ثانية (يموتوا، يتحركوا، يسباون)
+✅ يشتغل على اللاعبين الحقيقيين (البشر) فقط
+✅ Switch لتشغيل/إيقاف
+✅ سلايدر حجم من 1x لـ 10x
+✅ زر شفافية كاملة / شبه شفافة
+✅ واجهة متحركة بالإصبع
 ]]--
 
 -- ==================== SERVICES ====================
@@ -20,73 +20,122 @@ local player = Players.LocalPlayer
 -- ==================== VARIABLES ====================
 local hitboxEnabled = false
 local hitboxTransparent = false
-local hitboxMultiplier = 2.0 -- القيمة الافتراضية (السلايدر يتحكم فيها)
-local hitboxParts = {} -- جدول لتخزين أجزاء الهيتبوكس
+local hitboxMultiplier = 2.0
+local hitboxParts = {}
+local updateConnection = nil
 
--- ==================== FUNCTIONS ====================
-local function createHitbox(targetPlayer)
+-- ==================== HITBOX CORE ====================
+local function getRealPlayers()
+    local realPlayers = {}
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.UserId > 0 then -- لاعبين حقيقيين فقط (بشر)
+            table.insert(realPlayers, p)
+        end
+    end
+    return realPlayers
+end
+
+local function createHitboxForPlayer(targetPlayer)
     local character = targetPlayer.Character
-    if not character then return end
+    if not character then return nil end
     
     local head = character:FindFirstChild("Head")
-    if not head then return end
+    if not head then return nil end
     
-    -- التحقق من عدم وجود Hitbox سابق
-    local existing = character:FindFirstChild("HeadHitbox")
-    if existing then
-        existing:Destroy()
+    -- حذف الهيتبوكس القديم إذا موجود
+    local oldHitbox = character:FindFirstChild("HeadHitbox")
+    if oldHitbox then
+        oldHitbox:Destroy()
     end
     
-    -- إنشاء Hitbox
+    -- إنشاء هيتبوكس جديد
     local hitbox = Instance.new("Part")
     hitbox.Name = "HeadHitbox"
     hitbox.Size = Vector3.new(hitboxMultiplier, hitboxMultiplier, hitboxMultiplier)
-    hitbox.Shape = Enum.PartType.Ball -- دائري
+    hitbox.Shape = Enum.PartType.Ball -- دائري كروي
     hitbox.Anchored = false
     hitbox.CanCollide = false
     hitbox.Massless = true
+    hitbox.CanQuery = false
+    hitbox.CastShadow = false
     
     if hitboxTransparent then
-        hitbox.Transparency = 1 -- شفاف تماماً
-        hitbox.Material = Enum.Material.ForceField
-        hitbox.Color = Color3.fromRGB(255, 0, 0)
+        hitbox.Transparency = 1.0 -- شفاف تماماً
     else
-        hitbox.Transparency = 0.7 -- شبه شفاف
-        hitbox.Material = Enum.Material.ForceField
-        hitbox.Color = Color3.fromRGB(255, 0, 0)
+        hitbox.Transparency = 0.65 -- شبه شفاف
     end
     
-    -- توصيل بالرأس
+    hitbox.Material = Enum.Material.ForceField
+    hitbox.Color = Color3.fromRGB(255, 30, 30)
+    
+    -- توصيل الهيتبوكس بالرأس باستخدام WeldConstraint
     local weld = Instance.new("WeldConstraint")
     weld.Part0 = hitbox
     weld.Part1 = head
     weld.Parent = hitbox
     
     hitbox.Parent = character
-    table.insert(hitboxParts, hitbox)
+    
+    return hitbox
 end
 
-local function removeAllHitboxes()
+local function clearAllHitboxes()
     for _, hitbox in pairs(hitboxParts) do
-        if hitbox and hitbox.Parent then
-            hitbox:Destroy()
+        if hitbox then
+            pcall(function()
+                hitbox:Destroy()
+            end)
         end
     end
     hitboxParts = {}
 end
 
 local function updateAllHitboxes()
-    removeAllHitboxes()
-    if hitboxEnabled then
-        for _, p in pairs(Players:GetPlayers()) do
-            if p ~= player then
-                createHitbox(p)
-            end
+    -- مسح كل الهيتبوكسات القديمة أولاً
+    clearAllHitboxes()
+    
+    if not hitboxEnabled then return end
+    
+    -- إنشاء هيتبوكسات جديدة لجميع اللاعبين الحقيقيين
+    local realPlayers = getRealPlayers()
+    for _, targetPlayer in pairs(realPlayers) do
+        local hitbox = createHitboxForPlayer(targetPlayer)
+        if hitbox then
+            table.insert(hitboxParts, hitbox)
         end
     end
 end
 
--- ==================== GUI ====================
+local function startUpdating()
+    if updateConnection then
+        updateConnection:Disconnect()
+    end
+    
+    -- حلقة تحديث مستمرة كل 0.2 ثانية
+    updateConnection = RunService.Heartbeat:Connect(function()
+        if hitboxEnabled then
+            -- استخدام عداد للتحكم في التوقيت
+            if not updateConnection._lastUpdate then
+                updateConnection._lastUpdate = tick()
+            end
+            
+            if tick() - updateConnection._lastUpdate >= 0.2 then
+                updateConnection._lastUpdate = tick()
+                updateAllHitboxes()
+            end
+        end
+    end)
+end
+
+local function stopUpdating()
+    if updateConnection then
+        updateConnection:Disconnect()
+        updateConnection = nil
+    end
+    clearAllHitboxes()
+end
+
+-- ==================== GUI CREATION ====================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "HitboxController"
 screenGui.ResetOnSpawn = false
@@ -95,265 +144,290 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 -- الإطار الرئيسي
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 260, 0, 180)
-mainFrame.Position = UDim2.new(0.5, -130, 0.3, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-mainFrame.BackgroundTransparency = 0.15
+mainFrame.Size = UDim2.new(0, 270, 0, 200)
+mainFrame.Position = UDim2.new(0.5, -135, 0.35, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+mainFrame.BackgroundTransparency = 0.1
 mainFrame.BorderSizePixel = 2
-mainFrame.BorderColor3 = Color3.fromRGB(100, 100, 120)
+mainFrame.BorderColor3 = Color3.fromRGB(80, 80, 100)
 mainFrame.Parent = screenGui
 
--- عنوان
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0, 8)
+frameCorner.Parent = mainFrame
+
+-- ==================== TITLE ====================
 local titleLabel = Instance.new("TextLabel")
-titleLabel.Text = "🎯 Rivals Hitbox"
-titleLabel.Size = UDim2.new(1, 0, 0, 28)
-titleLabel.Position = UDim2.new(0, 0, 0, 0)
+titleLabel.Text = "🎯 RIVALS HITBOX v2.0"
+titleLabel.Size = UDim2.new(1, 0, 0, 30)
+titleLabel.Position = UDim2.new(0, 0, 0, 5)
 titleLabel.BackgroundTransparency = 1
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.TextSize = 16
+titleLabel.TextSize = 15
 titleLabel.Parent = mainFrame
 
--- زر التشغيل/الإيقاف
-local toggleSwitch = Instance.new("TextButton")
-toggleSwitch.Name = "ToggleSwitch"
-toggleSwitch.Size = UDim2.new(0, 50, 0, 50)
-toggleSwitch.Position = UDim2.new(0.05, 0, 0.2, 0)
-toggleSwitch.BackgroundColor3 = Color3.fromRGB(255, 60, 60) -- أحمر = مقفول
-toggleSwitch.Text = ""
-toggleSwitch.BorderSizePixel = 0
-toggleSwitch.Parent = mainFrame
+-- ==================== SWITCH BUTTON ====================
+local switchFrame = Instance.new("Frame")
+switchFrame.Size = UDim2.new(0, 56, 0, 30)
+switchFrame.Position = UDim2.new(0.08, 0, 0.22, 0)
+switchFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+switchFrame.BorderSizePixel = 0
+switchFrame.Parent = mainFrame
 
-local switchCorner = Instance.new("UICorner")
-switchCorner.CornerRadius = UDim.new(1, 0)
-switchCorner.Parent = toggleSwitch
+local switchFrameCorner = Instance.new("UICorner")
+switchFrameCorner.CornerRadius = UDim.new(1, 0)
+switchFrameCorner.Parent = switchFrame
 
-local switchLabel = Instance.new("TextLabel")
-switchLabel.Text = "OFF"
-switchLabel.Size = UDim2.new(1, 0, 1, 0)
-switchLabel.BackgroundTransparency = 1
-switchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-switchLabel.Font = Enum.Font.GothamBold
-switchLabel.TextSize = 14
-switchLabel.Parent = toggleSwitch
+local switchKnob = Instance.new("TextButton")
+switchKnob.Size = UDim2.new(0, 28, 0, 28)
+switchKnob.Position = UDim2.new(0, 1, 0, 1)
+switchKnob.BackgroundColor3 = Color3.fromRGB(255, 55, 55)
+switchKnob.Text = ""
+switchKnob.BorderSizePixel = 0
+switchKnob.Parent = switchFrame
 
--- سلايدر التحكم بالحجم
+local knobCorner = Instance.new("UICorner")
+knobCorner.CornerRadius = UDim.new(1, 0)
+knobCorner.Parent = switchKnob
+
+local switchStatusLabel = Instance.new("TextLabel")
+switchStatusLabel.Text = "OFF"
+switchStatusLabel.Size = UDim2.new(0, 45, 0, 22)
+switchStatusLabel.Position = UDim2.new(0.35, 0, 0.22, 0)
+switchStatusLabel.BackgroundTransparency = 1
+switchStatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+switchStatusLabel.Font = Enum.Font.GothamBold
+switchStatusLabel.TextSize = 13
+switchStatusLabel.Parent = mainFrame
+
+-- ==================== SLIDER ====================
+local sliderLabel = Instance.new("TextLabel")
+sliderLabel.Text = "Size:"
+sliderLabel.Size = UDim2.new(0, 35, 0, 20)
+sliderLabel.Position = UDim2.new(0.05, 0, 0.45, 0)
+sliderLabel.BackgroundTransparency = 1
+sliderLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+sliderLabel.Font = Enum.Font.Gotham
+sliderLabel.TextSize = 12
+sliderLabel.Parent = mainFrame
+
 local sliderFrame = Instance.new("Frame")
-sliderFrame.Size = UDim2.new(0.6, 0, 0, 8)
-sliderFrame.Position = UDim2.new(0.35, 0, 0.28, 0)
-sliderFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+sliderFrame.Size = UDim2.new(0.55, 0, 0, 8)
+sliderFrame.Position = UDim2.new(0.2, 0, 0.48, 0)
+sliderFrame.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
 sliderFrame.BorderSizePixel = 0
 sliderFrame.Parent = mainFrame
 
-local sliderCorner = Instance.new("UICorner")
-sliderCorner.CornerRadius = UDim.new(1, 0)
-sliderCorner.Parent = sliderFrame
+local sliderFrameCorner = Instance.new("UICorner")
+sliderFrameCorner.CornerRadius = UDim.new(1, 0)
+sliderFrameCorner.Parent = sliderFrame
 
 local sliderKnob = Instance.new("TextButton")
-sliderKnob.Size = UDim2.new(0, 24, 0, 24)
-sliderKnob.Position = UDim2.new(0.5, -12, 0, -8)
+sliderKnob.Size = UDim2.new(0, 22, 0, 22)
+sliderKnob.Position = UDim2.new(0.1, -11, 0, -7)
 sliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 sliderKnob.Text = ""
 sliderKnob.BorderSizePixel = 0
 sliderKnob.Parent = sliderFrame
 
-local knobCorner = Instance.new("UICorner")
-knobCorner.CornerRadius = UDim.new(1, 0)
-knobCorner.Parent = sliderKnob
+local sliderKnobCorner = Instance.new("UICorner")
+sliderKnobCorner.CornerRadius = UDim.new(1, 0)
+sliderKnobCorner.Parent = sliderKnob
 
 local sliderValueText = Instance.new("TextLabel")
 sliderValueText.Text = "2.0x"
-sliderValueText.Size = UDim2.new(0.6, 0, 0, 20)
-sliderValueText.Position = UDim2.new(0.35, 0, 0.45, 0)
+sliderValueText.Size = UDim2.new(0, 50, 0, 20)
+sliderValueText.Position = UDim2.new(0.78, 0, 0.45, 0)
 sliderValueText.BackgroundTransparency = 1
-sliderValueText.TextColor3 = Color3.fromRGB(200, 200, 200)
-sliderValueText.Font = Enum.Font.Gotham
-sliderValueText.TextSize = 12
+sliderValueText.TextColor3 = Color3.fromRGB(255, 255, 255)
+sliderValueText.Font = Enum.Font.GothamBold
+sliderValueText.TextSize = 13
 sliderValueText.Parent = mainFrame
 
--- زر الشفافية
-local transparencyToggle = Instance.new("TextButton")
-transparencyToggle.Size = UDim2.new(0, 40, 0, 40)
-transparencyToggle.Position = UDim2.new(0.05, 0, 0.62, 0)
-transparencyToggle.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-transparencyToggle.Text = ""
-transparencyToggle.BorderSizePixel = 1
-transparencyToggle.BorderColor3 = Color3.fromRGB(100, 100, 100)
-transparencyToggle.Parent = mainFrame
+-- ==================== TRANSPARENCY TOGGLE ====================
+local transparencyButton = Instance.new("TextButton")
+transparencyButton.Size = UDim2.new(0, 42, 0, 42)
+transparencyButton.Position = UDim2.new(0.08, 0, 0.65, 0)
+transparencyButton.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+transparencyButton.Text = ""
+transparencyButton.BorderSizePixel = 1
+transparencyButton.BorderColor3 = Color3.fromRGB(100, 100, 100)
+transparencyButton.Parent = mainFrame
 
-local transCorner = Instance.new("UICorner")
-transCorner.CornerRadius = UDim.new(0.2, 0)
-transCorner.Parent = transparencyToggle
+local transButtonCorner = Instance.new("UICorner")
+transButtonCorner.CornerRadius = UDim.new(0, 6)
+transButtonCorner.Parent = transparencyButton
 
 local checkMark = Instance.new("TextLabel")
 checkMark.Text = ""
 checkMark.Size = UDim2.new(1, 0, 1, 0)
 checkMark.BackgroundTransparency = 1
-checkMark.TextColor3 = Color3.fromRGB(0, 255, 0)
+checkMark.TextColor3 = Color3.fromRGB(0, 255, 80)
 checkMark.Font = Enum.Font.GothamBold
-checkMark.TextSize = 24
-checkMark.Parent = transparencyToggle
+checkMark.TextSize = 26
+checkMark.Parent = transparencyButton
 
 local transLabel = Instance.new("TextLabel")
-transLabel.Text = "شفاف"
-transLabel.Size = UDim2.new(0.4, 0, 0, 20)
-transLabel.Position = UDim2.new(0.3, 0, 0.68, 0)
+transLabel.Text = "شفاف تماماً"
+transLabel.Size = UDim2.new(0, 80, 0, 20)
+transLabel.Position = UDim2.new(0.3, 0, 0.7, 0)
 transLabel.BackgroundTransparency = 1
-transLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+transLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 transLabel.Font = Enum.Font.Gotham
 transLabel.TextSize = 11
 transLabel.Parent = mainFrame
 
--- زر الإغلاق
+-- ==================== CLOSE BUTTON ====================
 local closeButton = Instance.new("TextButton")
 closeButton.Text = "✕"
-closeButton.Size = UDim2.new(0, 28, 0, 28)
-closeButton.Position = UDim2.new(1, -28, 0, 0)
-closeButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -32, 0, 2)
+closeButton.BackgroundColor3 = Color3.fromRGB(255, 45, 45)
 closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 closeButton.Font = Enum.Font.GothamBold
-closeButton.TextSize = 14
+closeButton.TextSize = 16
 closeButton.BorderSizePixel = 0
 closeButton.Parent = mainFrame
 
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(0, 5)
-closeCorner.Parent = closeButton
+local closeButtonCorner = Instance.new("UICorner")
+closeButtonCorner.CornerRadius = UDim.new(1, 0)
+closeButtonCorner.Parent = closeButton
 
--- ==================== INTERACTIONS ====================
--- Toggle Switch
-toggleSwitch.MouseButton1Click:Connect(function()
+-- ==================== EVENTS ====================
+-- Switch Toggle
+switchKnob.MouseButton1Click:Connect(function()
     hitboxEnabled = not hitboxEnabled
     
     if hitboxEnabled then
-        toggleSwitch.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
-        toggleSwitch.Position = UDim2.new(0.15, 0, 0.2, 0) -- يروح لليمين
-        switchLabel.Text = "ON"
+        switchKnob.Position = UDim2.new(1, -29, 0, 1)
+        switchKnob.BackgroundColor3 = Color3.fromRGB(0, 210, 80)
+        switchFrame.BackgroundColor3 = Color3.fromRGB(0, 150, 60)
+        switchStatusLabel.Text = "ON"
+        switchStatusLabel.TextColor3 = Color3.fromRGB(0, 255, 100)
         updateAllHitboxes()
+        startUpdating()
     else
-        toggleSwitch.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-        toggleSwitch.Position = UDim2.new(0.05, 0, 0.2, 0) -- يرجع لليسار
-        switchLabel.Text = "OFF"
-        removeAllHitboxes()
+        switchKnob.Position = UDim2.new(0, 1, 0, 1)
+        switchKnob.BackgroundColor3 = Color3.fromRGB(255, 55, 55)
+        switchFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+        switchStatusLabel.Text = "OFF"
+        switchStatusLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        stopUpdating()
     end
 end)
 
--- Slider Dragging
+-- Slider
 local sliderDragging = false
 
-sliderKnob.MouseButton1Down:Connect(function()
-    sliderDragging = true
+local function updateSliderFromPosition(inputPosition)
+    local sliderPosX = sliderFrame.AbsolutePosition.X
+    local sliderWidth = sliderFrame.AbsoluteSize.X
+    local relativeX = math.clamp((inputPosition.X - sliderPosX) / sliderWidth, 0, 1)
+    
+    sliderKnob.Position = UDim2.new(relativeX, -11, 0, -7)
+    hitboxMultiplier = 1 + (relativeX * 9)
+    sliderValueText.Text = string.format("%.1fx", hitboxMultiplier)
+    
+    if hitboxEnabled then
+        updateAllHitboxes()
+    end
+end
+
+sliderKnob.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+       input.UserInputType == Enum.UserInputType.Touch then
+        sliderDragging = true
+    end
 end)
 
-sliderKnob.MouseButton1Up:Connect(function()
-    sliderDragging = false
+UserInputService.InputChanged:Connect(function(input)
+    if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or
+                           input.UserInputType == Enum.UserInputType.Touch) then
+        updateSliderFromPosition(input.Position)
+    end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or 
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or
        input.UserInputType == Enum.UserInputType.Touch then
         sliderDragging = false
     end
 end)
 
-UserInputService.InputChanged:Connect(function(input)
-    if sliderDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or 
-                           input.UserInputType == Enum.UserInputType.Touch) then
-        local mousePos = UserInputService:GetMouseLocation()
-        local sliderPos = sliderFrame.AbsolutePosition.X
-        local sliderWidth = sliderFrame.AbsoluteSize.X
-        
-        local relativeX = math.clamp((mousePos.X - sliderPos) / sliderWidth, 0, 1)
-        sliderKnob.Position = UDim2.new(relativeX, -12, 0, -8)
-        
-        hitboxMultiplier = 1 + (relativeX * 9) -- 1x لـ 10x
-        sliderValueText.Text = string.format("%.1fx", hitboxMultiplier)
-        
-        if hitboxEnabled then
-            updateAllHitboxes()
-        end
-    end
-end)
-
 -- Transparency Toggle
-transparencyToggle.MouseButton1Click:Connect(function()
+transparencyButton.MouseButton1Click:Connect(function()
     hitboxTransparent = not hitboxTransparent
     
     if hitboxTransparent then
         checkMark.Text = "✓"
-        transLabel.Text = "مرئي"
-        if hitboxEnabled then
-            updateAllHitboxes()
-        end
+        transLabel.Text = "شبه شفاف"
+        transparencyButton.BorderColor3 = Color3.fromRGB(0, 255, 80)
     else
         checkMark.Text = ""
-        transLabel.Text = "شفاف"
-        if hitboxEnabled then
-            updateAllHitboxes()
-        end
+        transLabel.Text = "شفاف تماماً"
+        transparencyButton.BorderColor3 = Color3.fromRGB(100, 100, 100)
+    end
+    
+    if hitboxEnabled then
+        updateAllHitboxes()
     end
 end)
 
 -- Close Button
 closeButton.MouseButton1Click:Connect(function()
+    stopUpdating()
     screenGui:Destroy()
-    removeAllHitboxes()
 end)
 
--- Dragging main frame
-local dragActive = false
+-- Dragging
+local dragging = false
 local dragStart = nil
-local startPos = nil
+local frameStartPos = nil
 
 mainFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch then
-        dragActive = true
+        dragging = true
         dragStart = input.Position
-        startPos = mainFrame.Position
+        frameStartPos = mainFrame.Position
     end
 end)
 
 mainFrame.InputChanged:Connect(function(input)
-    if dragActive and input.UserInputType == Enum.UserInputType.Touch then
+    if dragging and input.UserInputType == Enum.UserInputType.Touch then
         local delta = input.Position - dragStart
         mainFrame.Position = UDim2.new(
-            startPos.X.Scale,
-            startPos.X.Offset + delta.X,
-            startPos.Y.Scale,
-            startPos.Y.Offset + delta.Y
+            frameStartPos.X.Scale,
+            frameStartPos.X.Offset + delta.X,
+            frameStartPos.Y.Scale,
+            frameStartPos.Y.Offset + delta.Y
         )
     end
 end)
 
 mainFrame.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.Touch then
-        dragActive = false
+        dragging = false
     end
 end)
 
--- تحديث الهيتبوكس عند دخول لاعب جديد
+-- ==================== INITIAL SETUP ====================
+-- تحديث عند دخول لاعبين جدد
 Players.PlayerAdded:Connect(function(newPlayer)
-    if hitboxEnabled and newPlayer ~= player then
-        newPlayer.CharacterAdded:Connect(function()
-            wait(0.5)
+    if hitboxEnabled and newPlayer ~= player and newPlayer.UserId > 0 then
+        newPlayer.CharacterAdded:Connect(function(char)
+            wait(0.3)
             if hitboxEnabled then
-                createHitbox(newPlayer)
+                updateAllHitboxes()
             end
         end)
     end
 end)
 
--- تحديث لجميع اللاعبين الموجودين
-for _, p in pairs(Players:GetPlayers()) do
-    if p ~= player then
-        p.CharacterAdded:Connect(function()
-            wait(0.5)
-            if hitboxEnabled then
-                createHitbox(p)
-            end
-        end)
-    end
-end
-
-print("✅ Rivals Hitbox Script Loaded Successfully!")
-print("🎯 Controls: Switch | Slider (1x-10x) | Transparency | Draggable")
+print("="):rep(50)
+print("✅ RIVALS HEAD HITBOX v2.0 LOADED!")
+print("🔄 Real-time Update: Every 0.2 seconds")
+print("👤 Real Players Only (Human Detection)")
+print("🎮 Mobile Drag Support")
+print("📐 Ball Shape Hitbox on Enemy Heads")
+print("="):rep(50)
