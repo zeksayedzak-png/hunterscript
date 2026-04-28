@@ -85,55 +85,6 @@ if game.GameId == 6035872082 then
 		return visible(head, cam)
 	end
 
-	-- ==================== XRAY SYSTEM (ADDED) ====================
-	local xrayHighlights = {}
-
-	local function addXray(plr)
-		if plr == player then return end
-		if plr.UserId == 0 then return end -- نتجاهل البوتات
-
-		local function applyXray(char)
-			wait(0.3)
-			for _, part in pairs(char:GetChildren()) do
-				if part:IsA("BasePart") then
-					local highlight = Instance.new("Highlight")
-					highlight.Name = "XRAY"
-					highlight.FillColor = Color3.fromRGB(255, 0, 0) -- أحمر
-					highlight.FillTransparency = 0.6
-					highlight.OutlineColor = Color3.fromRGB(255, 0, 0)
-					highlight.OutlineTransparency = 0
-					highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop -- يظهر دايمًا فوق
-					highlight.Parent = part
-					table.insert(xrayHighlights, highlight)
-				end
-			end
-		end
-
-		if plr.Character then
-			applyXray(plr.Character)
-		end
-
-		plr.CharacterAdded:Connect(applyXray)
-	end
-
-	local function clearXray()
-		for _, h in pairs(xrayHighlights) do
-			if h and h.Parent then
-				h:Destroy()
-			end
-		end
-		xrayHighlights = {}
-	end
-
-	-- تطبيق Xray على اللاعبين الموجودين
-	for _, plr in pairs(Players:GetPlayers()) do
-		addXray(plr)
-	end
-
-	-- تطبيق Xray على اللاعبين الجدد
-	Players.PlayerAdded:Connect(addXray)
-	-- ==================== END XRAY ====================
-
 	Run.Heartbeat:Connect(function()
 		camera = Workspace.CurrentCamera
 		local cam = camera.CFrame.Position
